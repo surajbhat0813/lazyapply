@@ -9,6 +9,7 @@ SESSIONS_DIR = os.path.join(os.path.dirname(__file__), "../../data/sessions")
 # Make sure the sessions folder exists
 os.makedirs(SESSIONS_DIR, exist_ok=True)
 
+#dictionary of platforms and their login URLs for easy access - object-oriented approach to avoid hardcoding URLs in multiple places
 PLATFORMS = {
     "linkedin": "https://www.linkedin.com/login",
     "naukri": "https://www.naukri.com/nlogin/login",
