@@ -1,7 +1,11 @@
 import os
 import json
 from playwright.sync_api import sync_playwright
-from encryption import encrypt_data, decrypt_data
+
+try:
+    from backend.sessions.encryption import encrypt_data, decrypt_data
+except ImportError:
+    from encryption import encrypt_data, decrypt_data
 
 # Where we save session files
 SESSIONS_DIR = os.path.join(os.path.dirname(__file__), "../../data/sessions")
@@ -16,6 +20,105 @@ PLATFORMS = {
     "indeed": "https://secure.indeed.com/auth"
 }
 
+PENDING_LOGINS = {}
+
+
+def _get_session_file(platform: str) -> str:
+    return os.path.join(SESSIONS_DIR, f"{platform}.enc")
+
+
+def _save_cookies(platform: str, cookies: list[dict]) -> int:
+    session_data = json.dumps(cookies)
+    encrypted = encrypt_data(session_data)
+
+    session_file = _get_session_file(platform)
+    with open(session_file, "wb") as f:
+        f.write(encrypted)
+
+    return len(cookies)
+
+
+def start_session_login(platform: str) -> bool:
+    """
+    Starts a visible browser session for manual login and keeps it open
+    until the caller completes or cancels the flow.
+    """
+    if platform in PENDING_LOGINS:
+        return False
+
+    p = sync_playwright().start()
+    browser = p.chromium.launch(headless=False)
+    context = browser.new_context()
+    page = context.new_page()
+    page.goto(PLATFORMS[platform])
+
+    PENDING_LOGINS[platform] = {
+        "playwright": p,
+        "browser": browser,
+        "context": context,
+    }
+    return True
+
+
+def complete_session_login(platform: str) -> int | None:
+    """
+    Saves cookies from an in-progress manual login flow and closes the browser.
+    """
+    pending = PENDING_LOGINS.get(platform)
+    if pending is None:
+        return None
+
+    cookies = pending["context"].cookies()
+    cookie_count = _save_cookies(platform, cookies)
+    pending["browser"].close()
+    pending["playwright"].stop()
+    del PENDING_LOGINS[platform]
+    return cookie_count
+
+
+def cancel_session_login(platform: str) -> bool:
+    """
+    Closes an in-progress manual login flow without saving cookies.
+    """
+    pending = PENDING_LOGINS.get(platform)
+    if pending is None:
+        return False
+
+    pending["browser"].close()
+    pending["playwright"].stop()
+    del PENDING_LOGINS[platform]
+    return True
+
+
+def is_login_pending(platform: str) -> bool:
+    return platform in PENDING_LOGINS
+
+
+def verify_session(platform: str) -> dict[str, object] | None:
+    """
+    Verifies that a saved session file exists, decrypts cleanly,
+    and contains a cookie list.
+    """
+    session_file = _get_session_file(platform)
+    if not os.path.exists(session_file):
+        return None
+
+    with open(session_file, "rb") as f:
+        encrypted = f.read()
+
+    session_data = decrypt_data(encrypted)
+    cookies = json.loads(session_data)
+
+    if not isinstance(cookies, list):
+        raise ValueError("Saved session data is not a cookie list.")
+
+    return {
+        "platform": platform,
+        "saved": True,
+        "valid": True,
+        "cookie_count": len(cookies),
+    }
+
 
 def save_session(platform: str):
     """
@@ -26,31 +129,21 @@ def save_session(platform: str):
     print("👉 Please log in manually in the browser window that opens.")
     print("✅ Once you are fully logged in, come back here and press ENTER.\n")
 
-    with sync_playwright() as p:
-        # headless=False means the browser window is visible
-        browser = p.chromium.launch(headless=False)
-        context = browser.new_context()
-        page = context.new_page()
+    started = start_session_login(platform)
+    if not started:
+        print(f"⚠️  Login is already in progress for {platform.capitalize()}.")
+        return
 
-        # Go to the platform's login page
-        page.goto(PLATFORMS[platform])
+    input(f"Press ENTER after you have logged into {platform.capitalize()}...")
+    cookie_count = complete_session_login(platform)
 
-        # Wait for the user to log in manually
-        input(f"Press ENTER after you have logged into {platform.capitalize()}...")
+    if cookie_count is None:
+        print(f"⚠️  No active login flow found for {platform.capitalize()}.")
+        return
 
-        # Grab all cookies from the session
-        cookies = context.cookies()
-
-        # Encrypt and save to disk
-        session_data = json.dumps(cookies)
-        encrypted = encrypt_data(session_data)
-
-        session_file = os.path.join(SESSIONS_DIR, f"{platform}.enc")
-        with open(session_file, "wb") as f:
-            f.write(encrypted)
-
-        print(f"✅ Session saved for {platform.capitalize()}!")
-        browser.close()
+    print(
+        f"✅ Session saved for {platform.capitalize()}! ({cookie_count} cookies stored)"
+    )
 
 
 def load_session(platform: str):
@@ -58,12 +151,12 @@ def load_session(platform: str):
     Loads a saved encrypted session and returns an active browser context.
     Returns None if no session exists.
     """
-    session_file = os.path.join(SESSIONS_DIR, f"{platform}.enc")
+    session_file = _get_session_file(platform)
 
     if not os.path.exists(session_file):
         print(f"⚠️  No saved session found for {platform.capitalize()}.")
         print(f"    Run save_session('{platform}') first.")
-        return None, None
+        return None, None, None
 
     # Read and decrypt the session file
     with open(session_file, "rb") as f:
@@ -86,7 +179,7 @@ def is_session_saved(platform: str) -> bool:
     """
     Simple check — does a saved session file exist for this platform?
     """
-    session_file = os.path.join(SESSIONS_DIR, f"{platform}.enc")
+    session_file = _get_session_file(platform)
     return os.path.exists(session_file)
 
 
@@ -95,7 +188,7 @@ def delete_session(platform: str):
     Deletes the saved session for a platform.
     User will need to log in again next time.
     """
-    session_file = os.path.join(SESSIONS_DIR, f"{platform}.enc")
+    session_file = _get_session_file(platform)
 
     if os.path.exists(session_file):
         os.remove(session_file)
