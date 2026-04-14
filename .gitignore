@@ -1,0 +1,10 @@
+.DS_Store
+
+# Python cache and virtual environments
+__pycache__/
+*.py[cod]
+.venv/
+
+# Local runtime data
+data/sessions/
+data/secret.key
