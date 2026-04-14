@@ -1,13 +1,22 @@
 import argparse
 import sys
 
-from session_manager import (
-    PLATFORMS,
-    delete_session,
-    is_session_saved,
-    load_session,
-    save_session,
-)
+try:
+    from backend.sessions.session_manager import (
+        PLATFORMS,
+        delete_session,
+        is_session_saved,
+        load_session,
+        save_session,
+    )
+except ImportError:
+    from session_manager import (
+        PLATFORMS,
+        delete_session,
+        is_session_saved,
+        load_session,
+        save_session,
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
