@@ -1,5 +1,7 @@
-import { ExternalLink, CheckCircle, Clock, XCircle, Zap, AlertCircle } from 'lucide-react'
+import { useState } from 'react'
+import { ExternalLink, CheckCircle, Clock, XCircle, Zap, AlertCircle, Bookmark, BookmarkCheck } from 'lucide-react'
 import type { ScoredJob } from '../types'
+import { saveJob } from '../api/client'
 
 const PLATFORM_COLORS: Record<string, string> = {
   linkedin: 'bg-blue-600',
@@ -36,6 +38,29 @@ function ScoreRing({ score }: { score: number }) {
 export default function JobCard({ job }: { job: ScoredJob }) {
   const rec = REC_CONFIG[job.recommendation] ?? REC_CONFIG.maybe
   const RecIcon = rec.icon
+  const [saved, setSaved] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  async function handleSave() {
+    if (saved || saving) return
+    setSaving(true)
+    try {
+      const result = await saveJob({
+        title: job.title,
+        company: job.company,
+        location: job.location,
+        url: job.url,
+        platform: job.platform,
+        score: job.score,
+        recommendation: job.recommendation,
+        description: job.description,
+      })
+      setSaved(true)
+      if (result.already_saved) setSaved(true)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4 flex gap-4 hover:border-slate-600 transition-colors">
@@ -63,6 +88,14 @@ export default function JobCard({ job }: { job: ScoredJob }) {
               <RecIcon size={11} />
               {rec.label}
             </span>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              title={saved ? 'Saved to tracker' : 'Save to tracker'}
+              className={`transition-colors ${saved ? 'text-blue-400' : 'text-slate-500 hover:text-slate-300'} disabled:opacity-40`}
+            >
+              {saved ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
+            </button>
           </div>
         </div>
 

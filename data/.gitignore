@@ -1,2 +1,3 @@
 *.enc
 secret.key
+*.db
