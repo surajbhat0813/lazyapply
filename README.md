@@ -23,14 +23,18 @@ The only things left for you to do are the things only you can do — the call, 
 ## Features
 
 - **Multi-platform job scraping** — LinkedIn, Naukri.com, Indeed (more coming)
-- **Session-based login** — logs in once using your real account, saves session locally. Your credentials never leave your device.
-- **AI job scoring** — each posting is scored against your profile so you only see relevant matches
-- **HR email extraction** — AI parses job descriptions to find or infer recruiter contact details
-- **Tailored outreach** — generates a unique cold email or cover letter per job, referencing the company and role specifically
-- **Auto email dispatch** — optionally send emails automatically once you review and approve (opt-in only)
-- **Application tracker** — dashboard showing every application, its status, dates, and follow-up reminders
-- **Runs on a schedule** — set it to run daily or weekly, completely hands-off
-- **Free AI scoring** — uses Groq's free tier (Llama 3.3 70b) for job scoring. No credit card required. Ollama supported for fully offline use.
+- **Session-based login** — logs in once using your real account, saves a persistent browser profile locally. Your credentials never leave your device.
+- **AI job scoring** — each posting is scored 0–100 against your profile with reasoning, matching/missing skills, and an apply/maybe/skip recommendation
+- **Chatbot interface** — type what you're looking for in plain language; the assistant searches and ranks jobs in real time
+- **Profile-driven matching** — set your target roles, skills, experience, location, and salary range once; every search uses it automatically
+- **Platform session manager** — connect LinkedIn, Naukri, and Indeed from the Settings tab; get a warning in chat when a platform isn't connected
+- **Guest mode fallback** — Naukri and Indeed work without login; LinkedIn requires a session for full results
+- **HR email extraction** — AI parses job descriptions to find or infer recruiter contact details (coming soon)
+- **Tailored outreach** — generates a unique cold email or cover letter per job (coming soon)
+- **Auto email dispatch** — optionally send emails automatically once you review and approve (coming soon)
+- **Application tracker** — dashboard showing every application, its status, dates, and follow-up reminders (coming soon)
+- **Runs on a schedule** — set it to run daily or weekly, completely hands-off (coming soon)
+- **Free AI scoring** — uses Groq's free tier (Llama 3.3 70b). No credit card required.
 - **Fully local** — no cloud, no subscription, no data leaving your machine
 
 ---

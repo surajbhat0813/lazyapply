@@ -15,7 +15,7 @@ DATE_FILTER = {"day": "1", "week": "7", "month": "30"}
 
 
 class IndeedScraper:
-    def __init__(self, headless: bool = False):
+    def __init__(self, headless: bool = True):
         self.headless = headless
 
     def _profile_exists(self) -> bool:
