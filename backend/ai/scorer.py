@@ -4,7 +4,7 @@ import sys
 from dataclasses import dataclass, field
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
-from backend.scrapers.linkedin import Job
+from backend.scrapers.models import Job
 
 from groq import Groq
 
