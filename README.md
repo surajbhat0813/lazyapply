@@ -4,7 +4,7 @@
 
 [![Status](https://img.shields.io/badge/status-in%20development-yellow)](https://github.com)
 [![Stack](https://img.shields.io/badge/stack-React%20%7C%20Python%20%7C%20FastAPI-blue)](https://github.com)
-[![AI](https://img.shields.io/badge/AI-Claude%20%7C%20Ollama-purple)](https://github.com)
+[![AI](https://img.shields.io/badge/AI-Groq%20%7C%20Ollama-purple)](https://github.com)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Free](https://img.shields.io/badge/free-forever-brightgreen)](https://github.com)
 
@@ -30,7 +30,7 @@ The only things left for you to do are the things only you can do — the call, 
 - **Auto email dispatch** — optionally send emails automatically once you review and approve (opt-in only)
 - **Application tracker** — dashboard showing every application, its status, dates, and follow-up reminders
 - **Runs on a schedule** — set it to run daily or weekly, completely hands-off
-- **Works with local AI** — defaults to Ollama (free, offline) with optional Claude/OpenAI API key for better results
+- **Free AI scoring** — uses Groq's free tier (Llama 3.3 70b) for job scoring. No credit card required. Ollama supported for fully offline use.
 - **Fully local** — no cloud, no subscription, no data leaving your machine
 
 ---
@@ -66,7 +66,7 @@ Track in dashboard → follow-up reminders
 | Backend | Python, FastAPI |
 | Scraping | Playwright (browser automation) |
 | Database | SQLite (local, no setup needed) |
-| AI | Ollama (default, free) / Anthropic Claude / OpenAI |
+| AI | Groq (free tier, Llama 3.3 70b) / Ollama (local, offline) |
 | Email | Gmail API / SendGrid |
 | Scheduler | APScheduler |
 
@@ -127,11 +127,11 @@ npm run dev
 ## Roadmap
 
 - [x] Project architecture & planning
-- [ ] Session manager (Playwright login + cookie storage)
-- [ ] LinkedIn scraper
+- [x] Session manager (Playwright login + cookie storage)
+- [x] LinkedIn scraper
 - [ ] Naukri.com scraper
 - [ ] Indeed scraper
-- [ ] AI job scoring layer
+- [x] AI job scoring layer (Groq — Llama 3.3 70b, free tier)
 - [ ] HR email extraction
 - [ ] Tailored message generation
 - [ ] Email dispatch (Gmail API)
