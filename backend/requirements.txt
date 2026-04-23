@@ -1,4 +1,5 @@
 cryptography
+groq
 fastapi
 playwright
 uvicorn
