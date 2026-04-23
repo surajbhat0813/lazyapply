@@ -1,50 +1,36 @@
-import json
 import os
 import time
-from dataclasses import dataclass, field
-from datetime import datetime
 from urllib.parse import urlencode
 
 from playwright.sync_api import Page, sync_playwright
 
 import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
-from backend.sessions.encryption import decrypt_data
+from backend.scrapers.models import Job
 
-
-SESSION_FILE = os.path.join(os.path.dirname(__file__), "../../data/sessions/linkedin.enc")
+PROFILE_DIR = os.path.join(os.path.dirname(__file__), "../../data/sessions/profiles/linkedin")
 
 LINKEDIN_JOBS_URL = "https://www.linkedin.com/jobs/search/"
 
 REMOTE_FILTER = {"remote": "2", "onsite": "1", "hybrid": "3"}
 DATE_FILTER = {"day": "r86400", "week": "r604800", "month": "r2592000"}
 
+# Selectors that work for both authenticated and guest (public) views
+AUTH_CARD = "li.jobs-search-results__list-item"
+GUEST_CARD = "li.job-search-card"
+ANY_CARD = f"{AUTH_CARD}, {GUEST_CARD}"
 
-@dataclass
-class Job:
-    title: str
-    company: str
-    location: str
-    url: str
-    description: str = ""
-    posted_date: str = ""
-    employment_type: str = ""
-    seniority_level: str = ""
-    scraped_at: str = field(default_factory=lambda: datetime.now().isoformat())
 
 
 class LinkedInScraper:
     def __init__(self, headless: bool = True):
         self.headless = headless
 
-    def _load_cookies(self) -> list[dict]:
-        if not os.path.exists(SESSION_FILE):
+    def _check_profile(self) -> None:
+        if not os.path.exists(PROFILE_DIR) or not any(os.scandir(PROFILE_DIR)):
             raise RuntimeError(
-                "No LinkedIn session found. Run save_session('linkedin') first."
+                "No LinkedIn session found. Use POST /sessions/linkedin/save/start to log in first."
             )
-        with open(SESSION_FILE, "rb") as f:
-            encrypted = f.read()
-        return json.loads(decrypt_data(encrypted))
 
     def _build_search_url(
         self,
@@ -60,16 +46,36 @@ class LinkedInScraper:
             params["f_TPR"] = DATE_FILTER[date_posted]
         return f"{LINKEDIN_JOBS_URL}?{urlencode(params)}"
 
+    def _dismiss_modal(self, page: Page) -> None:
+        """Close any sign-in modal that appears over job results."""
+        try:
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(300)
+        except Exception:
+            pass
+        try:
+            btn = (
+                page.query_selector("button.modal__dismiss") or
+                page.query_selector("[aria-label='Dismiss']") or
+                page.query_selector("button[data-tracking-control-name*='dismiss']") or
+                page.query_selector("button[data-tracking-control-name*='modal']") or
+                page.query_selector("icon[type='cancel']")
+            )
+            if btn:
+                btn.click()
+                page.wait_for_timeout(500)
+        except Exception:
+            pass
+
     def _scroll_to_load(self, page: Page, target: int) -> None:
         """Scroll the job list panel until we have at least `target` cards loaded."""
         prev_count = 0
         for _ in range(15):
-            cards = page.query_selector_all("li.jobs-search-results__list-item")
+            cards = page.query_selector_all(ANY_CARD)
             count = len(cards)
             if count >= target:
                 break
             if count == prev_count:
-                # Try "Load more" button if no new cards appeared
                 btn = page.query_selector("button.infinite-scroller__show-more-button")
                 if btn:
                     btn.click()
@@ -82,10 +88,10 @@ class LinkedInScraper:
             prev_count = count
 
     def _collect_cards(self, page: Page, max_results: int) -> list[dict]:
-        """Extract basic metadata from each job card in the search results."""
+        """Extract basic metadata from each job card — handles both auth and guest layouts."""
         self._scroll_to_load(page, max_results)
 
-        cards = page.query_selector_all("li.jobs-search-results__list-item")
+        cards = page.query_selector_all(ANY_CARD)
         jobs = []
         seen = set()
 
@@ -93,24 +99,35 @@ class LinkedInScraper:
             if len(jobs) >= max_results:
                 break
             try:
-                link = card.query_selector("a.job-card-list__title--link") or \
-                       card.query_selector("a.job-card-list__title")
-                if not link:
-                    continue
+                # Authenticated card layout
+                link = (
+                    card.query_selector("a.job-card-list__title--link") or
+                    card.query_selector("a.job-card-list__title")
+                )
+                if link:
+                    raw_url = link.get_attribute("href") or ""
+                    title = link.inner_text().strip()
+                    company_el = card.query_selector(".job-card-container__company-name")
+                    company = company_el.inner_text().strip() if company_el else ""
+                    location_el = card.query_selector(".job-card-container__metadata-item")
+                    location = location_el.inner_text().strip() if location_el else ""
+                else:
+                    # Guest card layout
+                    link = card.query_selector("a.base-card__full-link")
+                    if not link:
+                        continue
+                    raw_url = link.get_attribute("href") or ""
+                    title_el = card.query_selector("h3.base-search-card__title")
+                    title = title_el.inner_text().strip() if title_el else ""
+                    company_el = card.query_selector(".base-search-card__subtitle")
+                    company = company_el.inner_text().strip() if company_el else ""
+                    location_el = card.query_selector(".job-search-card__location")
+                    location = location_el.inner_text().strip() if location_el else ""
 
-                raw_url = link.get_attribute("href") or ""
                 url = raw_url.split("?")[0].strip()
                 if not url or url in seen:
                     continue
                 seen.add(url)
-
-                title = link.inner_text().strip()
-
-                company_el = card.query_selector(".job-card-container__company-name")
-                company = company_el.inner_text().strip() if company_el else ""
-
-                location_el = card.query_selector(".job-card-container__metadata-item")
-                location = location_el.inner_text().strip() if location_el else ""
 
                 date_el = card.query_selector("time")
                 posted_date = date_el.get_attribute("datetime") if date_el else ""
@@ -132,7 +149,8 @@ class LinkedInScraper:
         page.goto(url, wait_until="domcontentloaded")
         page.wait_for_timeout(1000)
 
-        # Expand truncated description if "Show more" button exists
+        self._dismiss_modal(page)
+
         try:
             btn = page.query_selector(".jobs-description__footer-button")
             if btn:
@@ -142,8 +160,11 @@ class LinkedInScraper:
             pass
 
         description = ""
-        desc_el = page.query_selector(".jobs-description__content") or \
-                  page.query_selector(".jobs-description-content__text")
+        desc_el = (
+            page.query_selector(".jobs-description__content") or
+            page.query_selector(".jobs-description-content__text") or
+            page.query_selector(".description__text")
+        )
         if desc_el:
             description = desc_el.inner_text().strip()
 
@@ -176,26 +197,23 @@ class LinkedInScraper:
         max_results: int = 25,
         fetch_descriptions: bool = True,
     ) -> list[Job]:
-        """
-        Search LinkedIn Jobs and return structured job listings.
-
-        Args:
-            query:               Job title or keywords, e.g. "Frontend Engineer"
-            location:            Location string, e.g. "Bangalore" or "Remote"
-            remote:              Work type filter — "remote", "onsite", or "hybrid"
-            date_posted:         Recency filter — "day", "week", or "month"
-            max_results:         Cap on number of jobs returned (default 25)
-            fetch_descriptions:  Visit each job page to get full description (default True)
-
-        Returns:
-            List of Job objects
-        """
-        cookies = self._load_cookies()
+        self._check_profile()
 
         p = sync_playwright().start()
-        browser = p.chromium.launch(headless=self.headless)
-        context = browser.new_context()
-        context.add_cookies(cookies)
+        context = p.chromium.launch_persistent_context(
+            user_data_dir=PROFILE_DIR,
+            headless=self.headless,
+            args=["--disable-blink-features=AutomationControlled"],
+            user_agent=(
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            ),
+            viewport={"width": 1280, "height": 800},
+        )
+        context.add_init_script(
+            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+        )
 
         try:
             page = context.new_page()
@@ -203,16 +221,16 @@ class LinkedInScraper:
 
             print(f"Searching LinkedIn Jobs: {query} in {location}")
             page.goto(search_url, wait_until="domcontentloaded")
+            page.wait_for_timeout(2000)
 
-            # Bail early if session expired and LinkedIn redirected to login
             if "login" in page.url or "authwall" in page.url:
                 raise RuntimeError(
                     "LinkedIn session expired. Re-run save_session('linkedin') to refresh."
                 )
 
-            page.wait_for_selector(
-                "li.jobs-search-results__list-item", timeout=15000
-            )
+            self._dismiss_modal(page)
+
+            page.wait_for_selector(ANY_CARD, timeout=20000)
 
             cards = self._collect_cards(page, max_results)
             print(f"Found {len(cards)} listings")
@@ -224,7 +242,7 @@ class LinkedInScraper:
                 if fetch_descriptions:
                     try:
                         detail = self._extract_detail(page, card["url"])
-                        time.sleep(1)  # polite delay between job page requests
+                        time.sleep(1)
                     except Exception as e:
                         print(f"    Could not fetch description: {e}")
 
@@ -233,6 +251,7 @@ class LinkedInScraper:
                     company=card["company"],
                     location=card["location"],
                     url=card["url"],
+                    platform="linkedin",
                     posted_date=card["posted_date"],
                     description=detail.get("description", ""),
                     employment_type=detail.get("employment_type", ""),
@@ -242,5 +261,5 @@ class LinkedInScraper:
             return jobs
 
         finally:
-            browser.close()
+            context.close()
             p.stop()
