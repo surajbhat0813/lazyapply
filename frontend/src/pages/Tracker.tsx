@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ExternalLink, Trash2, ChevronDown, ClipboardList } from 'lucide-react'
+import { ExternalLink, Trash2, ChevronDown, ClipboardList, Mail, Copy, Check } from 'lucide-react'
 import { listApplications, updateStatus, updateNotes, deleteApplication } from '../api/client'
 import type { Application, ApplicationStatus } from '../types'
 
@@ -110,6 +110,29 @@ function NotesCell({ app }: { app: Application }) {
   )
 }
 
+function ContactCell({ email }: { email: string | null }) {
+  const [copied, setCopied] = useState(false)
+  if (!email) return <span className="text-slate-600 text-xs">—</span>
+
+  async function copy() {
+    await navigator.clipboard.writeText(email!)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+
+  return (
+    <button
+      onClick={copy}
+      className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors max-w-[180px] truncate"
+      title={email}
+    >
+      <Mail size={11} className="flex-shrink-0" />
+      <span className="truncate">{email}</span>
+      {copied ? <Check size={11} className="flex-shrink-0" /> : <Copy size={11} className="flex-shrink-0 opacity-50" />}
+    </button>
+  )
+}
+
 const FILTER_OPTIONS: { label: string; value: string | undefined }[] = [
   { label: 'All', value: undefined },
   ...STATUSES.map(s => ({ label: s.label, value: s.value })),
@@ -179,6 +202,7 @@ export default function Tracker() {
                 <th className="text-left pb-3 pr-4 font-medium">Job</th>
                 <th className="text-left pb-3 pr-4 font-medium hidden md:table-cell">Platform</th>
                 <th className="text-left pb-3 pr-4 font-medium">Status</th>
+                <th className="text-left pb-3 pr-4 font-medium hidden lg:table-cell">Contact</th>
                 <th className="text-left pb-3 pr-4 font-medium hidden lg:table-cell">Notes</th>
                 <th className="text-left pb-3 pr-4 font-medium hidden md:table-cell">Saved</th>
                 <th className="pb-3 w-8" />
@@ -212,6 +236,9 @@ export default function Tracker() {
                   </td>
                   <td className="py-3 pr-4">
                     <StatusDropdown app={app} onChange={handleStatusChange} />
+                  </td>
+                  <td className="py-3 pr-4 hidden lg:table-cell">
+                    <ContactCell email={app.contact_email} />
                   </td>
                   <td className="py-3 pr-4 hidden lg:table-cell">
                     <NotesCell app={app} />

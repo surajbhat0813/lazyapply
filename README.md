@@ -29,12 +29,13 @@ It searches LinkedIn, Naukri.com, and Indeed on your behalf, scores each job 0�
 - **Session manager** — connect LinkedIn from the Settings tab using your real browser; profile is saved locally so you stay logged in
 - **Guest mode fallback** — Naukri and Indeed work without login; LinkedIn requires a session for full results
 - **Session warning banner** — chat warns you when a platform session isn't connected, with a direct link to Settings
+- **Intent-aware chatbot** — the chat understands search, save, tracker, and apply intents from plain language, not just job search queries
+- **Application tracker** — save jobs from chat, track status (saved/applied/interviewing/offer/rejected), and add notes, all in a dedicated Tracker tab backed by local SQLite
+- **HR contact extraction** — pulls a recruiter email straight from the job description when listed, or infers a likely `careers@company.com`-style address from a company domain mentioned in the posting (clearly flagged as an unverified guess); shown on each job card and saved with tracked applications
 
 ### Coming soon
-- HR email extraction — AI parses job descriptions to find or infer recruiter contact details
 - Tailored outreach — generates a unique cold email or cover letter per job
 - Auto email dispatch — optionally send emails automatically after you review
-- Application tracker — dashboard showing every application, its status, and follow-up reminders
 - Runs on a schedule — set it to run daily or weekly, fully hands-off
 
 ---
@@ -81,7 +82,8 @@ personal/
 │       ├── pages/
 │       │   ├── Chat.tsx       # Chatbot job search interface
 │       │   ├── Profile.tsx    # User profile setup
-│       │   └── Settings.tsx   # Platform session manager
+│       │   ├── Settings.tsx   # Platform session manager
+│       │   └── Tracker.tsx    # Application tracker dashboard
 │       ├── components/
 │       │   ├── JobCard.tsx    # Score ring, skills, recommendation
 │       │   └── Sidebar.tsx    # Navigation
@@ -90,8 +92,11 @@ personal/
 │
 ├── backend/                   # Python + FastAPI
 │   ├── main.py                # App entry point + CORS config
+│   ├── database.py            # SQLite connection + schema for tracker
 │   ├── api/
 │   │   ├── jobs.py            # POST /jobs/search
+│   │   ├── chat.py            # Intent-aware chatbot (search/save/tracker/apply)
+│   │   ├── tracker.py         # Application tracker CRUD endpoints
 │   │   └── sessions.py        # Session status + connect endpoints
 │   ├── scrapers/
 │   │   ├── models.py          # Shared Job dataclass
@@ -202,10 +207,11 @@ Go to the **Chat** tab, select a platform, optionally set a date filter, and typ
 - [x] AI job scoring layer (Groq — Llama 3.3 70b, free tier)
 - [x] FastAPI backend with jobs + sessions endpoints
 - [x] React frontend — chatbot, profile, settings, job cards
-- [ ] HR email extraction
+- [x] Intent-aware chatbot (search/save/tracker/apply)
+- [x] Application tracker (SQLite-backed, status + notes)
+- [x] HR contact extraction (extracted from listing, or inferred from domain)
 - [ ] Tailored message generation
 - [ ] Email dispatch (Gmail API)
-- [ ] Application tracker
 - [ ] Scheduler (daily/weekly runs)
 - [ ] Chrome extension (stretch goal)
 

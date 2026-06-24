@@ -31,3 +31,8 @@ def init_db() -> None:
             )
         """)
         conn.commit()
+
+        existing_cols = {row["name"] for row in conn.execute("PRAGMA table_info(applications)")}
+        if "contact_email" not in existing_cols:
+            conn.execute("ALTER TABLE applications ADD COLUMN contact_email TEXT")
+            conn.commit()

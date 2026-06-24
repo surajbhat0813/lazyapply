@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ExternalLink, CheckCircle, Clock, XCircle, Zap, AlertCircle, Bookmark, BookmarkCheck } from 'lucide-react'
+import { ExternalLink, CheckCircle, Clock, XCircle, Zap, AlertCircle, Bookmark, BookmarkCheck, Mail, Copy, Check } from 'lucide-react'
 import type { ScoredJob } from '../types'
 import { saveJob } from '../api/client'
 
@@ -35,6 +35,37 @@ function ScoreRing({ score }: { score: number }) {
   )
 }
 
+function ContactBadge({ job }: { job: ScoredJob }) {
+  const [copied, setCopied] = useState(false)
+  if (!job.contactEmail || job.contactSource === 'none') return null
+
+  const inferred = job.contactSource === 'inferred'
+
+  async function copy() {
+    await navigator.clipboard.writeText(job.contactEmail!)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+
+  return (
+    <div className="flex items-center gap-1 flex-wrap">
+      <button
+        onClick={copy}
+        title={job.contactNote}
+        className={`flex items-center gap-1 text-xs px-1.5 py-0.5 rounded border transition-colors
+          ${inferred
+            ? 'border-dashed border-slate-600 text-slate-400 hover:text-slate-200'
+            : 'border-blue-400/30 bg-blue-400/10 text-blue-300 hover:text-blue-200'}`}
+      >
+        <Mail size={11} />
+        {job.contactEmail}
+        {copied ? <Check size={11} /> : <Copy size={11} className="opacity-60" />}
+      </button>
+      {inferred && <span className="text-slate-600 text-[10px] italic">guess</span>}
+    </div>
+  )
+}
+
 export default function JobCard({ job }: { job: ScoredJob }) {
   const rec = REC_CONFIG[job.recommendation] ?? REC_CONFIG.maybe
   const RecIcon = rec.icon
@@ -54,6 +85,7 @@ export default function JobCard({ job }: { job: ScoredJob }) {
         score: job.score,
         recommendation: job.recommendation,
         description: job.description,
+        contactEmail: job.contactEmail,
       })
       setSaved(true)
       if (result.already_saved) setSaved(true)
@@ -101,7 +133,9 @@ export default function JobCard({ job }: { job: ScoredJob }) {
 
         <p className="text-slate-400 text-xs mb-2 leading-relaxed">{job.reasoning}</p>
 
-        <div className="flex flex-wrap gap-3 text-xs">
+        <ContactBadge job={job} />
+
+        <div className="flex flex-wrap gap-3 text-xs mt-2">
           {job.matchingSkills.length > 0 && (
             <div className="flex items-center gap-1 flex-wrap">
               <Zap size={11} className="text-green-400" />
