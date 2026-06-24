@@ -25,6 +25,10 @@ export interface ScoredJob {
   matchingSkills: string[]
   missingSkills: string[]
   recommendation: 'apply' | 'maybe' | 'skip'
+  contactEmail: string | null
+  contactSource: 'extracted' | 'inferred' | 'none'
+  contactConfidence: 'high' | 'low' | 'none'
+  contactNote: string
 }
 
 export interface SearchResponse {
@@ -52,6 +56,7 @@ export interface Application {
   notes: string
   saved_at: string
   applied_at: string | null
+  contact_email: string | null
 }
 
 export interface ChatApiResponse {

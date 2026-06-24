@@ -58,6 +58,10 @@ export async function searchJobs(params: {
       matchingSkills: j.matching_skills,
       missingSkills: j.missing_skills,
       recommendation: j.recommendation,
+      contactEmail: j.contact_email,
+      contactSource: j.contact_source,
+      contactConfidence: j.contact_confidence,
+      contactNote: j.contact_note,
     })),
   }
 }
@@ -85,11 +89,13 @@ export async function saveJob(job: {
   score?: number
   recommendation?: string
   description?: string
+  contactEmail?: string | null
 }): Promise<{ id: number; already_saved: boolean }> {
+  const { contactEmail, ...rest } = job
   const res = await fetch(`${BASE}/tracker/save`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(job),
+    body: JSON.stringify({ ...rest, contact_email: contactEmail ?? null }),
   })
   if (!res.ok) throw new Error('Failed to save job')
   return res.json()
@@ -159,6 +165,7 @@ export async function sendChatMessage(params: {
         score: j.score,
         recommendation: j.recommendation,
         description: j.description,
+        contact_email: j.contactEmail,
       })),
     }),
   })
@@ -188,6 +195,10 @@ export async function sendChatMessage(params: {
       matchingSkills: j.matching_skills,
       missingSkills: j.missing_skills,
       recommendation: j.recommendation,
+      contactEmail: j.contact_email,
+      contactSource: j.contact_source,
+      contactConfidence: j.contact_confidence,
+      contactNote: j.contact_note,
     })),
   }
 }

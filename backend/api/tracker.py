@@ -19,6 +19,7 @@ class SaveJobRequest(BaseModel):
     score: int | None = None
     recommendation: str = ""
     description: str = ""
+    contact_email: str | None = None
 
 
 class UpdateStatusRequest(BaseModel):
@@ -48,12 +49,12 @@ def save_job(req: SaveJobRequest):
         cursor = conn.execute(
             """
             INSERT INTO applications
-                (title, company, location, url, platform, score, recommendation, description)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (title, company, location, url, platform, score, recommendation, description, contact_email)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 req.title, req.company, req.location, req.url,
-                req.platform, req.score, req.recommendation, req.description,
+                req.platform, req.score, req.recommendation, req.description, req.contact_email,
             ),
         )
         conn.commit()

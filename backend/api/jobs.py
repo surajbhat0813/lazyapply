@@ -6,6 +6,7 @@ from backend.scrapers.linkedin import LinkedInScraper
 from backend.scrapers.naukri import NaukriScraper
 from backend.scrapers.indeed import IndeedScraper
 from backend.ai.scorer import JobScorer, UserProfile
+from backend.ai.contact_extractor import ContactExtractor
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -50,6 +51,10 @@ class ScoredJobResponse(BaseModel):
     matching_skills: list[str]
     missing_skills: list[str]
     recommendation: str  # "apply" | "maybe" | "skip"
+    contact_email: str | None
+    contact_source: str    # "extracted" | "inferred" | "none"
+    contact_confidence: str  # "high" | "low" | "none"
+    contact_note: str
 
 
 class SearchResponse(BaseModel):
@@ -107,9 +112,14 @@ def search_and_score(req: SearchRequest) -> SearchResponse:
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    # 3. Shape response
-    results = [
-        ScoredJobResponse(
+    # 3. Extract/infer HR contact info per job
+    extractor = ContactExtractor()
+
+    # 4. Shape response
+    results = []
+    for s in scored:
+        contact = extractor.extract(s.job)
+        results.append(ScoredJobResponse(
             title=s.job.title,
             company=s.job.company,
             location=s.job.location,
@@ -125,8 +135,10 @@ def search_and_score(req: SearchRequest) -> SearchResponse:
             matching_skills=s.matching_skills,
             missing_skills=s.missing_skills,
             recommendation=s.recommendation,
-        )
-        for s in scored
-    ]
+            contact_email=contact.email,
+            contact_source=contact.source,
+            contact_confidence=contact.confidence,
+            contact_note=contact.note,
+        ))
 
     return SearchResponse(total=len(results), results=results)

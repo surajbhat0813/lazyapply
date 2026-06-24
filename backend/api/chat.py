@@ -10,6 +10,7 @@ from backend.scrapers.linkedin import LinkedInScraper
 from backend.scrapers.naukri import NaukriScraper
 from backend.scrapers.indeed import IndeedScraper
 from backend.ai.scorer import JobScorer, UserProfile
+from backend.ai.contact_extractor import ContactExtractor
 from backend.database import get_connection, init_db
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -37,6 +38,7 @@ class JobContext(BaseModel):
     score: int | None = None
     recommendation: str = ""
     description: str = ""
+    contact_email: str | None = None
 
 
 class ProfileRequest(BaseModel):
@@ -179,9 +181,12 @@ def handle_search(req: ChatRequest, query: str) -> ChatResponse:
         salary_max=req.profile.salary_max,
     )
     scored = JobScorer(profile).score_all(jobs)
+    extractor = ContactExtractor()
 
-    results = [
-        {
+    results = []
+    for s in scored:
+        contact = extractor.extract(s.job)
+        results.append({
             "title": s.job.title, "company": s.job.company, "location": s.job.location,
             "url": s.job.url, "platform": s.job.platform, "description": s.job.description,
             "posted_date": s.job.posted_date, "employment_type": s.job.employment_type,
@@ -189,9 +194,9 @@ def handle_search(req: ChatRequest, query: str) -> ChatResponse:
             "score": s.score, "reasoning": s.reasoning,
             "matching_skills": s.matching_skills, "missing_skills": s.missing_skills,
             "recommendation": s.recommendation,
-        }
-        for s in scored
-    ]
+            "contact_email": contact.email, "contact_source": contact.source,
+            "contact_confidence": contact.confidence, "contact_note": contact.note,
+        })
 
     content = f"Found **{len(results)} jobs** on {req.platform} matching your search. Here are the top results ranked by fit:"
     return ChatResponse(type="search", content=content, jobs=results)
@@ -231,10 +236,10 @@ def handle_save(last_jobs: list[JobContext], save_all: bool, indices: list[int] 
 
             conn.execute(
                 """INSERT INTO applications
-                   (title, company, location, url, platform, score, recommendation, description)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                   (title, company, location, url, platform, score, recommendation, description, contact_email)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (job.title, job.company, job.location, job.url,
-                 job.platform, job.score, job.recommendation, job.description),
+                 job.platform, job.score, job.recommendation, job.description, job.contact_email),
             )
             saved += 1
         conn.commit()
