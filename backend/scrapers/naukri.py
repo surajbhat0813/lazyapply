@@ -14,9 +14,52 @@ NAUKRI_JOBS_URL = "https://www.naukri.com/jobs-in-india"
 REMOTE_FILTER = {"remote": "5", "hybrid": "2", "onsite": "1"}
 DATE_FILTER = {"day": "1", "week": "7", "month": "30"}
 
+# Confirmed against live Naukri HTML (April 2025)
+CARD_SELECTORS = ", ".join([
+    "div.srp-jobtuple-wrapper",   # current primary
+    ".cust-job-tuple",             # current inner
+    "article.jobTuple",            # legacy
+    "div[class*='srp-jobtuple']",  # fallback
+    "div[class*='jobTuple']",      # fallback
+])
+
+TITLE_SELECTORS = [
+    "a.title",                     # confirmed: class="title "
+    ".row1 h2 a",
+    ".row1 a",
+    "h2 a",
+    "a[href*='job-listings']",
+]
+
+COMPANY_SELECTORS = [
+    "a.comp-name",                 # confirmed: class=" comp-name mw-25"
+    ".comp-name",
+    ".subTitle",
+    "a.subTitle",
+    ".row2 a",
+]
+
+LOCATION_SELECTORS = [
+    ".locWdth",                    # confirmed in some pages
+    ".loc-wrap span[title]",       # confirmed: <span title="Mohali">
+    ".loc span",
+    ".row3 span[title]",
+    "[class*='location'] span",
+]
+
+DESC_SELECTORS = [
+    ".job-desc",
+    ".JDC",
+    "[class*='job-description']",
+    ".dang-inner-html",
+    "[class*='jobDesc']",
+    "#job_description",
+    ".description__text",
+]
+
 
 class NaukriScraper:
-    def __init__(self, headless: bool = True):
+    def __init__(self, headless: bool = False):
         self.headless = headless
 
     def _profile_exists(self) -> bool:
@@ -42,25 +85,26 @@ class NaukriScraper:
     def _dismiss_modal(self, page: Page) -> None:
         try:
             page.keyboard.press("Escape")
-            page.wait_for_timeout(300)
+            page.wait_for_timeout(400)
         except Exception:
             pass
-        try:
-            btn = (
-                page.query_selector("[class*='close']") or
-                page.query_selector("[class*='modal'] button") or
-                page.query_selector("[aria-label='close']")
-            )
-            if btn:
-                btn.click()
-                page.wait_for_timeout(300)
-        except Exception:
-            pass
+        for selector in ["[class*='close']", "[aria-label='close']", "[class*='modal'] button"]:
+            try:
+                btn = page.query_selector(selector)
+                if btn and btn.is_visible():
+                    btn.click()
+                    page.wait_for_timeout(300)
+                    break
+            except Exception:
+                continue
+
+    def _find_cards(self, page: Page) -> list:
+        return page.query_selector_all(CARD_SELECTORS)
 
     def _scroll_to_load(self, page: Page, target: int) -> None:
         prev_count = 0
         for _ in range(15):
-            cards = page.query_selector_all("article.jobTuple, div.list > article, .cust-job-tuple")
+            cards = self._find_cards(page)
             count = len(cards)
             if count >= target:
                 break
@@ -71,10 +115,32 @@ class NaukriScraper:
                 page.wait_for_timeout(1500)
             prev_count = count
 
+    def _get_text(self, card, selectors: list[str]) -> str:
+        for sel in selectors:
+            try:
+                el = card.query_selector(sel)
+                if el:
+                    return el.inner_text().strip()
+            except Exception:
+                continue
+        return ""
+
+    def _get_attr(self, card, selectors: list[str], attr: str) -> str:
+        for sel in selectors:
+            try:
+                el = card.query_selector(sel)
+                if el:
+                    val = el.get_attribute(attr) or ""
+                    if val:
+                        return val.strip()
+            except Exception:
+                continue
+        return ""
+
     def _collect_cards(self, page: Page, max_results: int) -> list[dict]:
         self._scroll_to_load(page, max_results)
 
-        cards = page.query_selector_all("article.jobTuple, div.list > article, .cust-job-tuple")
+        cards = self._find_cards(page)
         jobs = []
         seen = set()
 
@@ -82,38 +148,21 @@ class NaukriScraper:
             if len(jobs) >= max_results:
                 break
             try:
-                link = (
-                    card.query_selector("a.title") or
-                    card.query_selector(".title a") or
-                    card.query_selector("a[class*='title']")
-                )
-                if not link:
+                url = self._get_attr(card, TITLE_SELECTORS, "href")
+                if not url:
                     continue
-
-                url = link.get_attribute("href") or ""
                 url = url.split("?")[0].strip()
                 if not url or url in seen:
                     continue
                 seen.add(url)
 
-                title = link.inner_text().strip()
+                title = self._get_text(card, TITLE_SELECTORS)
+                if not title:
+                    continue
 
-                company_el = (
-                    card.query_selector(".subTitle") or
-                    card.query_selector(".comp-name") or
-                    card.query_selector("a.subTitle")
-                )
-                company = company_el.inner_text().strip() if company_el else ""
-
-                location_el = (
-                    card.query_selector(".locWdth") or
-                    card.query_selector(".location") or
-                    card.query_selector("[class*='location']")
-                )
-                location = location_el.inner_text().strip() if location_el else ""
-
-                date_el = card.query_selector(".job-post-day, [class*='date']")
-                posted_date = date_el.inner_text().strip() if date_el else ""
+                company = self._get_text(card, COMPANY_SELECTORS)
+                location = self._get_text(card, LOCATION_SELECTORS)
+                posted_date = self._get_text(card, [".job-post-day", "[class*='date']", "[class*='freshness']"])
 
                 jobs.append({
                     "title": title,
@@ -129,21 +178,19 @@ class NaukriScraper:
 
     def _extract_detail(self, page: Page, url: str) -> dict:
         page.goto(url, wait_until="domcontentloaded")
-        page.wait_for_timeout(1500)
+        page.wait_for_timeout(2000)
         self._dismiss_modal(page)
 
         description = ""
-        desc_el = (
-            page.query_selector(".job-desc") or
-            page.query_selector(".JDC") or
-            page.query_selector("[class*='job-description']") or
-            page.query_selector(".dang-inner-html")
-        )
-        if desc_el:
-            description = desc_el.inner_text().strip()
+        for sel in DESC_SELECTORS:
+            el = page.query_selector(sel)
+            if el:
+                description = el.inner_text().strip()
+                if description:
+                    break
 
         employment_type = ""
-        emp_el = page.query_selector("[class*='employment'], [class*='job-type']")
+        emp_el = page.query_selector("[class*='employment'], [class*='job-type'], [class*='jobType']")
         if emp_el:
             employment_type = emp_el.inner_text().strip()
 
@@ -192,12 +239,16 @@ class NaukriScraper:
 
             print(f"Searching Naukri: {query} in {location}")
             page.goto(search_url, wait_until="domcontentloaded")
-            page.wait_for_timeout(2000)
+            page.wait_for_timeout(3000)
             self._dismiss_modal(page)
 
-            page.wait_for_selector(
-                "article.jobTuple, div.list > article, .cust-job-tuple", timeout=20000
-            )
+            # Wait for any known card selector to appear
+            try:
+                page.wait_for_selector(CARD_SELECTORS, timeout=25000)
+            except Exception:
+                # If no known selector found, dump what's visible to help debug
+                print("  Warning: no job cards found with known selectors — page may have changed")
+                return []
 
             cards = self._collect_cards(page, max_results)
             print(f"Found {len(cards)} listings")

@@ -1,8 +1,9 @@
-import { MessageSquare, User, Settings } from 'lucide-react'
+import { MessageSquare, User, Settings, ClipboardList } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 
 const links = [
   { to: '/', icon: MessageSquare, label: 'Chat' },
+  { to: '/tracker', icon: ClipboardList, label: 'Tracker' },
   { to: '/profile', icon: User, label: 'Profile' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ]

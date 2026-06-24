@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, BriefcaseIcon, AlertTriangle, Settings } from 'lucide-react'
+import { Send, Loader2, BriefcaseIcon, AlertTriangle, Settings, BookmarkCheck } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { searchJobs, getSessionStatus } from '../api/client'
+import { sendChatMessage, getSessionStatus } from '../api/client'
 import JobCard from '../components/JobCard'
-import type { ChatMessage, Platform, UserProfile } from '../types'
+import type { ChatMessage, Platform, UserProfile, ScoredJob } from '../types'
 
 const PLATFORMS: Platform[] = ['linkedin', 'naukri', 'indeed']
 const DATE_OPTIONS = [
@@ -36,21 +36,26 @@ function TypingDots() {
   )
 }
 
+function renderContent(content: string) {
+  return content.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+}
+
 export default function Chat() {
   const navigate = useNavigate()
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: '0',
       role: 'assistant',
-      content: "Hi! I'm your job hunting assistant. Tell me what kind of job you're looking for — I'll search across platforms and rank results against your profile.",
+      content: "Hi! I'm your job hunting assistant. Tell me what kind of job you're looking for, ask me to save results, check your tracker, or anything else.",
       timestamp: new Date(),
     },
   ])
   const [input, setInput] = useState('')
-  const [platform, setPlatform] = useState<Platform>('linkedin')
+  const [platform, setPlatform] = useState<Platform>('naukri')
   const [datePosted, setDatePosted] = useState<string | undefined>(undefined)
   const [loading, setLoading] = useState(false)
   const [sessionSaved, setSessionSaved] = useState<boolean | null>(null)
+  const [lastJobs, setLastJobs] = useState<ScoredJob[]>([])
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -72,7 +77,7 @@ export default function Chat() {
       setMessages(prev => [...prev, {
         id: Date.now().toString(),
         role: 'assistant',
-        content: '⚠️ No profile found. Please set up your profile first — go to the Profile tab and fill in your details.',
+        content: 'No profile found. Please go to the Profile tab and fill in your details first.',
         timestamp: new Date(),
       }])
       return
@@ -97,25 +102,33 @@ export default function Chat() {
     setLoading(true)
 
     try {
-      const result = await searchJobs({
-        query,
-        location: profile.location,
+      const result = await sendChatMessage({
+        message: query,
         platform,
         datePosted: datePosted as any,
         maxResults: 10,
         profile,
+        lastJobs,
       })
 
-      const replyContent = result.total === 0
-        ? 'No jobs found for that search. Try different keywords or a different platform.'
-        : `Found **${result.total} jobs** matching your search on ${platform}. Here are the top results ranked by how well they match your profile:`
+      if (result.type === 'search' && result.jobs.length > 0) {
+        setLastJobs(result.jobs)
+      }
 
       setMessages(prev => prev.map(m =>
-        m.loading ? { ...m, loading: false, content: replyContent, jobs: result.results } : m
+        m.loading
+          ? {
+              ...m,
+              loading: false,
+              content: result.content,
+              jobs: result.type === 'search' ? result.jobs : undefined,
+              responseType: result.type,
+            }
+          : m
       ))
     } catch (err: any) {
       setMessages(prev => prev.map(m =>
-        m.loading ? { ...m, loading: false, content: `❌ Error: ${err.message}` } : m
+        m.loading ? { ...m, loading: false, content: `Error: ${err.message}` } : m
       ))
     } finally {
       setLoading(false)
@@ -136,11 +149,11 @@ export default function Chat() {
         <BriefcaseIcon size={20} className="text-blue-400" />
         <div>
           <h1 className="text-white font-semibold">Job Search</h1>
-          <p className="text-slate-500 text-xs">Tell me what you're looking for</p>
+          <p className="text-slate-500 text-xs">Search jobs, save results, or check your tracker</p>
         </div>
       </div>
 
-      {/* Session warning banner */}
+      {/* Session warning */}
       {sessionSaved === false && (
         <div className="mx-6 mt-3 flex items-center justify-between gap-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg px-4 py-2.5">
           <div className="flex items-center gap-2 text-yellow-400 text-sm">
@@ -170,8 +183,23 @@ export default function Chat() {
                 ) : (
                   <>
                     {msg.content && (
-                      <div className="bg-slate-800 text-slate-200 rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed">
-                        {msg.content}
+                      <div className={`rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed
+                        ${msg.responseType === 'saved'
+                          ? 'bg-blue-600/20 border border-blue-500/30 text-blue-200'
+                          : 'bg-slate-800 text-slate-200'}`}
+                      >
+                        {msg.responseType === 'saved' && (
+                          <BookmarkCheck size={14} className="inline mr-1.5 text-blue-400" />
+                        )}
+                        <span dangerouslySetInnerHTML={{ __html: renderContent(msg.content) }} />
+                        {msg.responseType === 'tracker_summary' && (
+                          <button
+                            onClick={() => navigate('/tracker')}
+                            className="ml-2 text-xs text-blue-400 hover:text-blue-300 underline"
+                          >
+                            Open Tracker →
+                          </button>
+                        )}
                       </div>
                     )}
                     {msg.jobs && msg.jobs.length > 0 && (
@@ -194,7 +222,6 @@ export default function Chat() {
 
       {/* Input area */}
       <div className="px-6 py-4 border-t border-slate-800 space-y-3">
-        {/* Options row */}
         <div className="flex gap-2 flex-wrap">
           <div className="flex gap-1 bg-slate-800 rounded-lg p-1">
             {PLATFORMS.map(p => (
@@ -222,13 +249,12 @@ export default function Chat() {
           </div>
         </div>
 
-        {/* Text input */}
         <div className="flex gap-3">
           <textarea
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKey}
-            placeholder='e.g. "Python backend engineer jobs, hybrid" — press Enter to search'
+            placeholder='Search for jobs, or say "save the first one", "show my tracker"…'
             rows={2}
             className="flex-1 bg-slate-800 border border-slate-700 text-slate-200 placeholder-slate-500 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-blue-500 transition-colors"
           />
